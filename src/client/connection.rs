@@ -54,7 +54,7 @@ impl Factory {
         request_timeout: u64,
         max_connect_timeout: Option<u64>,
         max_request_timeout: Option<u64>,
-        tls_config: Option<Arc<rustls::ClientConfig>>,
+        tls_config: Option<Arc<rustls::ClientConfig>>
     ) -> Factory {
         Factory {
             rx,
@@ -75,7 +75,8 @@ impl Factory {
             self.connect_timeout,
             self.request_timeout,
             self.max_connect_timeout,
-            self.max_request_timeout
+            self.max_request_timeout,
+            self.tls_config.clone()
         )
     }
 }
@@ -107,8 +108,8 @@ pub struct Connection {
     request_failures: u64,
     request_timeout: u64,
     max_request_timeout: Option<u64>,
-    tls_config: Option<Arc<rustls::ClientConfig>>,
-    tls_session: Option<rustls::ClientSession>
+    tls_session: Option<rustls::ClientSession>,
+    tls_config: Option<Arc<rustls::ClientConfig>>
 }
 
 impl Connection {
@@ -120,7 +121,8 @@ impl Connection {
         connect_timeout: u64,
         request_timeout: u64,
         max_connect_timeout: Option<u64>,
-        max_request_timeout: Option<u64>
+        max_request_timeout: Option<u64>,
+        tls_config: Option<Arc<rustls::ClientConfig>>
     ) -> Self {
         let mut conn = Connection {
             stream: None,
@@ -135,8 +137,8 @@ impl Connection {
             request_failures: 0,
             request_timeout,
             max_request_timeout,
-            tls_config: None,
-            tls_session: None
+            tls_config,
+            tls_session: None,
         };
         conn.reconnect();
         conn
@@ -193,9 +195,14 @@ impl Connection {
         self.state = State::Connecting;
 
         if let Ok(s) = TcpStream::connect(&self.addr) {
-            self.tls_config = Some(Arc::new(rustls::ClientConfig::new()));
-            self.tls_session = Some(rustls::ClientSession::new(&self.tls_config.unwrap(),
-                webpki::DNSNameRef::try_from_ascii_str(&self.addr.ip().to_string()).unwrap()));
+            if let Some(ref tls_config) = self.tls_config {
+                self.tls_session = Some(
+                    rustls::ClientSession::new(
+                        tls_config,
+                        webpki::DNSNameRef::try_from_ascii_str(&self.addr.ip().to_string()).unwrap(),
+                    )
+                );
+            }
             self.stream = Some(s);
         } else {
             debug!("Error connecting: {}", self.addr);

@@ -42,7 +42,7 @@ pub struct Config {
     max_connect_timeout: Option<u64>,
     rx_buffer_size: usize,
     tx_buffer_size: usize,
-    tls_config: Option<Arc<rustls::ClientConfig>>,
+    tls_config: Option<rustls::ClientConfig>
 }
 
 impl Default for Config {
@@ -77,6 +77,47 @@ impl Config {
     /// get vector of endpoints
     pub fn servers(&self) -> Vec<String> {
         self.servers.clone()
+    }
+
+    pub fn tls_config(&self) -> Option<Arc<rustls::ClientConfig>> {
+        self.tls_config.clone().map(|v| Arc::new(v))
+    }
+
+    // set the CA to validate remote cert
+    pub fn set_tls_ca(&mut self, ca_file: String) -> &mut Self {
+        let mut tls_config = self.tls_config.take().unwrap_or_else(|| {
+            rustls::ClientConfig::new()
+        });
+
+        let certfile = fs::File::open(&ca_file).expect("Cannot open CA file");
+        let mut reader = BufReader::new(certfile);
+        tls_config.root_store.add_pem_file(&mut reader).unwrap();
+        self.tls_config = Some(tls_config);
+        self
+    }
+
+    // set the client single cert
+    pub fn set_tls_single_cert(&mut self, cert_file: String, key_file: String) -> &mut Self {
+        let mut tls_config = self.tls_config.take().unwrap_or_else(|| {
+            rustls::ClientConfig::new()
+        });
+
+        // load the cert
+        let cert_file = fs::File::open(cert_file).expect("cannot open certificate file");
+        let mut cert_buf = BufReader::new(cert_file);
+        let cert_chain = rustls::internal::pemfile::certs(&mut cert_buf).unwrap();
+
+        // load the key
+        let key_file = fs::File::open(key_file).expect("cannot open private key file");
+        let mut key_buf = BufReader::new(key_file);
+        let keys = rustls::internal::pemfile::pkcs8_private_keys(&mut key_buf).unwrap();
+        assert!(keys.len() == 1);
+        let key_der = keys[0].clone();
+
+        tls_config.set_single_client_cert(cert_chain, key_der);
+
+        self.tls_config = Some(tls_config);
+        self
     }
 
     /// get the number of connections maintained to each endpoint
@@ -238,53 +279,6 @@ impl Config {
         if (self.servers.len() * self.pool_size) > MAX_CONNECTIONS {
             halt!("Too many total connections");
         }
-        self
-    }
-
-    pub fn tls_config(&self) -> Option<Arc<rustls::ClientConfig>> {
-        self.tls_config.clone()
-    }
-
-    // set the CA to validate remote cert
-    pub fn set_tls_ca(&mut self, ca_file: String) -> &mut Self {
-        if self.tls_config.is_none() {
-            self.tls_config = Some(Arc::new(rustls::ClientConfig::new()));
-        }
-
-        let mut config = self.tls_config.expect("No tls config");
-
-        let certfile = fs::File::open(&ca_file).expect("Cannot open CA file");
-        let mut reader = BufReader::new(certfile);
-        config.root_store.
-            add_pem_file(&mut reader).
-            unwrap();
-        self.tls_config = Some(config);
-        self
-    }
-
-    // set the client single cert
-    pub fn set_tls_single_cert(&mut self, cert_file: String, key_file: String) -> &mut Self {
-        if self.tls_config.is_none() {
-            self.tls_config = Some(Arc::new(rustls::ClientConfig::new()));
-        }
-
-        let mut config = self.tls_config.expect("No tls config");
-
-        // load the cert
-        let cert_file = fs::File::open(&cert_file).expect("cannot open certificate file");
-        let mut cert_buf = BufReader::new(cert_file);
-        let cert_chain = rustls::internal::pemfile::certs(&mut cert_buf).unwrap();
-
-        // load the key
-        let key_file = fs::File::open(&key_file).expect("cannot open private key file");
-        let mut key_buf = BufReader::new(key_file);
-        let keys = rustls::internal::pemfile::rsa_private_keys(&mut key_buf).unwrap();
-        assert!(keys.len() == 1);
-        let key_der = keys[0].clone();
-
-        config.set_single_client_cert(cert_chain, key_der);
-
-        self.tls_config = Some(config);
         self
     }
 }

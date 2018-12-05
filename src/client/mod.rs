@@ -120,19 +120,18 @@ impl Client {
             connect_timeout: config.base_connect_timeout(),
             connect_ratelimit: config.connect_ratelimit(),
         };
-
         for server in client.config.servers() {
             if let Ok(sock_addr) = client.resolve(server.clone()) {
                 for _ in 0..client.config.pool_size() {
                     if let Some(mut ratelimit) = client.connect_ratelimit.clone() {
                         ratelimit.wait();
                     }
-                    let connection = client.factory.connect(sock_addr); // TODO(ashanat): add is_tls boolean
+                    let connection = client.factory.connect(sock_addr);
                     match client.connections.insert(connection) {
                         Ok(token) => {
                             client.send_stat(token, Stat::SocketCreate);
                             if client.has_stream(token) {
-                                client.register(client.connections[token].stream().unwrap(), token);
+                                client.register(client.connections[token].stream().expect("Cannot Register"), token);
                                 client.set_timeout(token);
                             } else {
                                 error!("failure creating connection");

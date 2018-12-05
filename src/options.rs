@@ -71,5 +71,26 @@ pub fn opts() -> Options {
     opts.optflagmulti("v", "verbose", "verbosity (stacking)");
     opts.optflag("h", "help", "print this help menu");
 
+    opts.optopt(
+        "",
+        "ca_path",
+        "root certificates",
+        "STRING",
+    );
+
+    opts.optopt(
+        "",
+        "cert_path",
+        "client authentication certificates",
+        "STRING",
+    );
+
+    opts.optopt(
+        "",
+        "key_path",
+        "client authentication key",
+        "STRING",
+    );
+
     opts
 }

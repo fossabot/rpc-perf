@@ -155,6 +155,16 @@ pub fn main() {
         .set_tx_buffer_size(config.tx_buffer_size())
         .set_internet_protocol(internet_protocol);
 
+    if let Some(ca_file) = ca_path {
+        client_config.set_tls_ca(ca_file);
+    }
+
+    if key_path.is_some() && cert_path.is_some() {
+        let key_file = key_path.unwrap();
+        let cert_file = cert_path.unwrap();
+        client_config.set_tls_single_cert(cert_file, key_file);
+    }
+
     if let Some(mut ratelimit) = connect_ratelimit {
         client_config.set_connect_ratelimit(Some(ratelimit.make_handle()));
         let _ = thread::Builder::new().name(format!("limiter")).spawn(
@@ -165,16 +175,6 @@ pub fn main() {
     }
     for server in servers {
         client_config.add_server(server);
-    }
-
-    if let Some(ca_file) = ca_path {
-        client_config.set_tls_ca(ca_file);
-    }
-
-    if key_path.is_some() && cert_path.is_some() {
-        let key_file = key_path.unwrap();
-        let cert_file = cert_path.unwrap();
-        client_config.set_tls_single_cert(cert_file, key_file);
     }
 
     info!("-----");
