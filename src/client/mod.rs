@@ -131,7 +131,7 @@ impl Client {
                         Ok(token) => {
                             client.send_stat(token, Stat::SocketCreate);
                             if client.has_stream(token) {
-                                client.register(client.connections[token].stream().expect("Cannot Register"), token);
+                                client.register(client.connections[token].stream().unwrap(), token);
                                 client.set_timeout(token);
                             } else {
                                 error!("failure creating connection");
