@@ -16,7 +16,8 @@
 const RX_BUFFER: usize = 4 * 1024;
 const TX_BUFFER: usize = 4 * 1024;
 
-use super::net::InternetProtocol;
+use client::Endpoint;
+use client::net::InternetProtocol;
 
 use bytes::{Buf, MutBuf};
 use client::buffer::Buffer;
@@ -26,7 +27,6 @@ use mio::unix::UnixReady;
 use vecio::Rawv;
 use rustls::Session;
 use std::io::{self, Read, Write};
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -69,9 +69,9 @@ impl Factory {
         }
     }
 
-    pub fn connect(&self, address: SocketAddr) -> Connection {
+    pub fn connect(&self, endpoint: Endpoint) -> Connection {
         Connection::new(
-            address,
+            endpoint,
             self.rx,
             self.tx,
             self.connect_timeout,
@@ -98,7 +98,7 @@ impl Default for Factory {
 }
 
 pub struct Connection {
-    addr: SocketAddr,
+    endpoint: Endpoint,
     stream: Option<TcpStream>,
     state: State,
     buffer: Buffer,
@@ -117,7 +117,7 @@ pub struct Connection {
 impl Connection {
     /// create connection with specified buffer sizes
     pub fn new(
-        address: SocketAddr,
+        endpoint: Endpoint,
         rx: usize,
         tx: usize,
         connect_timeout: u64,
@@ -132,7 +132,7 @@ impl Connection {
             buffer: Buffer::new(rx, tx),
             timeout: None,
             protocol: InternetProtocol::Any,
-            addr: address,
+            endpoint,
             connect_failures: 0,
             connect_timeout,
             max_connect_timeout,
@@ -196,18 +196,18 @@ impl Connection {
     pub fn connect(&mut self) {
         self.state = State::Connecting;
 
-        if let Ok(s) = TcpStream::connect(&self.addr) {
+        if let Ok(s) = TcpStream::connect(&self.endpoint.addr()) {
             if let Some(ref tls_config) = self.tls_config {
                 self.tls_session = Some(
                     rustls::ClientSession::new(
                         tls_config,
-                        webpki::DNSNameRef::try_from_ascii_str(&self.addr.ip().to_string()).expect("failed to dns resolve"),
+                        webpki::DNSNameRef::try_from_ascii_str(&self.endpoint.hostname()).expect("failed to dns resolve"),
                     )
                 );
             }
             self.stream = Some(s);
         } else {
-            debug!("Error connecting: {}", self.addr);
+            debug!("Error connecting: {}", self.endpoint.hostname());
         }
     }
 

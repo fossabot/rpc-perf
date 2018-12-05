@@ -47,6 +47,30 @@ fn pollopt_conn() -> PollOpt {
 
 type Slab<T> = slab::Slab<T, Token>;
 
+#[derive(Clone)]
+pub struct Endpoint {
+    hostname: String,
+    addr: SocketAddr,
+}
+
+impl Endpoint {
+    pub fn new(server: String, addr: SocketAddr) -> Self {
+        let tokens: Vec<&str> = server.split(":").collect();
+        Self {
+            hostname: tokens[0].to_string(),
+            addr,
+        }
+    }
+
+    pub fn addr(&self) -> SocketAddr {
+        self.addr.clone()
+    }
+
+    pub fn hostname(&self) -> String {
+        self.hostname.clone()
+    }
+}
+
 pub struct Client {
     config: Config,
     connections: Slab<Connection>,
@@ -121,12 +145,12 @@ impl Client {
             connect_ratelimit: config.connect_ratelimit(),
         };
         for server in client.config.servers() {
-            if let Ok(sock_addr) = client.resolve(server.clone()) {
+            if let Ok(endpoint) = client.resolve(server.clone()) {
                 for _ in 0..client.config.pool_size() {
                     if let Some(mut ratelimit) = client.connect_ratelimit.clone() {
                         ratelimit.wait();
                     }
-                    let connection = client.factory.connect(sock_addr);
+                    let connection = client.factory.connect(endpoint.clone());
                     match client.connections.insert(connection) {
                         Ok(token) => {
                             client.send_stat(token, Stat::SocketCreate);
@@ -253,7 +277,7 @@ impl Client {
     }
 
     /// resolve host:ip to SocketAddr
-    fn resolve(&mut self, server: String) -> Result<SocketAddr, &'static str> {
+    fn resolve(&mut self, server: String) -> Result<Endpoint, &'static str> {
         if let Ok(result) = server.to_socket_addrs() {
             for addr in result {
                 match addr {
@@ -261,14 +285,14 @@ impl Client {
                         if self.config.internet_protocol() == InternetProtocol::Any ||
                             self.config.internet_protocol() == InternetProtocol::IpV4
                         {
-                            return Ok(addr);
+                            return Ok(Endpoint::new(server, addr));
                         }
                     }
                     SocketAddr::V6(_) => {
                         if self.config.internet_protocol() == InternetProtocol::Any ||
                             self.config.internet_protocol() == InternetProtocol::IpV6
                         {
-                            return Ok(addr);
+                            return Ok(Endpoint::new(server, addr));
                         }
                     }
                 }
