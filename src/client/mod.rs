@@ -101,6 +101,10 @@ impl Client {
             config.base_request_timeout().unwrap_or(0),
             config.max_connect_timeout(),
             config.max_request_timeout(),
+            config.tls_config(),
+            config.ca_file(),
+            config.cert_file(),
+            config.key_file()
         );
 
         let mut client = Client {
@@ -126,7 +130,7 @@ impl Client {
                     if let Some(mut ratelimit) = client.connect_ratelimit.clone() {
                         ratelimit.wait();
                     }
-                    let connection = client.factory.connect(sock_addr);
+                    let connection = client.factory.connect(sock_addr, client.is_tls()); // TODO(ashanat): add is_tls boolean
                     match client.connections.insert(connection) {
                         Ok(token) => {
                             client.send_stat(token, Stat::SocketCreate);
@@ -152,13 +156,18 @@ impl Client {
 
     #[inline]
     fn has_stream(&self, token: Token) -> bool {
-        self.connections[token].stream().is_some()
+        self.connections[token].stream().is_some() || self.connections[token].tls_stream().is_some()
     }
 
     #[inline]
     fn is_connection(&self, token: Token) -> bool {
         token.0 <= MAX_CONNECTIONS
     }
+
+    #[inline]
+    fn is_tls(&self) -> bool{self.config.key_file().is_some() &&
+                            self.config.ca_file().is_some() &&
+                            self.config.cert_file().is_some() }
 
     fn set_timeout(&mut self, token: Token) {
         if self.is_connection(token) {

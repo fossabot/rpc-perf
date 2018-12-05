@@ -48,12 +48,15 @@ mpmc = "=0.1.2"
 pad = "=0.1.4"
 rand = "=0.3.17"
 ratelimit = "=0.4.2"
+rustls = "=0.14.0"
 shuteye = "=0.3.2"
 slab = "=0.3.0"
 simple_logger = "=0.4.0"
 tic = "=0.2.4"
 time = "=0.1.38"
 toml = "=0.4.6"
+webpki-roots = "=0.15.0"
+webpki = "=0.18.1"
 
 [features]
 asm = [ "tic/asm" ]

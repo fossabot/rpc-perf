@@ -37,6 +37,8 @@ extern crate tic;
 extern crate time;
 extern crate toml;
 
+extern crate webpki;
+
 #[macro_use]
 mod common;
 mod cfgtypes;
@@ -101,6 +103,10 @@ pub fn main() {
     let waterfall = matches.opt_str("waterfall");
     let trace = matches.opt_str("trace");
 
+    let cert_path = matches.opt_str("cert_path");
+    let key_path = matches.opt_str("key_path");
+    let ca_path = matches.opt_str("ca_path");
+
     // Load workload configuration
     let config = config::load_config(&matches).unwrap_or_else(|e| {
         halt!("{}", e);
@@ -147,7 +153,10 @@ pub fn main() {
         .set_max_connect_timeout(config.max_connect_timeout())
         .set_rx_buffer_size(config.rx_buffer_size())
         .set_tx_buffer_size(config.tx_buffer_size())
-        .set_internet_protocol(internet_protocol);
+        .set_internet_protocol(internet_protocol)
+        .set_key_file(key_path)
+        .set_cert_file(cert_path)
+        .set_ca_file(ca_path);
 
     if let Some(mut ratelimit) = connect_ratelimit {
         client_config.set_connect_ratelimit(Some(ratelimit.make_handle()));
@@ -160,6 +169,8 @@ pub fn main() {
     for server in servers {
         client_config.add_server(server);
     }
+
+    client_config.set_tls_config();
 
     info!("-----");
     info!("Connecting...");
