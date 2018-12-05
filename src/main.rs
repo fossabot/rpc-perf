@@ -153,10 +153,20 @@ pub fn main() {
         .set_max_connect_timeout(config.max_connect_timeout())
         .set_rx_buffer_size(config.rx_buffer_size())
         .set_tx_buffer_size(config.tx_buffer_size())
-        .set_internet_protocol(internet_protocol)
-        .set_key_file(key_path)
-        .set_cert_file(cert_path)
-        .set_ca_file(ca_path);
+        .set_internet_protocol(internet_protocol);
+
+    if let Some(ca_file) = ca_path {
+        client_config.set_tls_ca(ca_file);
+    }
+
+    if key_path.is_some() && cert_path.is_some() {
+        let key_file = key_path.unwrap();
+        let cert_file = cert_path.unwrap();
+        client_config.set_tls_single_cert(cert_file, key_file);
+    }
+        // .set_key_file(key_path)
+        // .set_cert_file(cert_path)
+        // .set_ca_file(ca_path);
 
     if let Some(mut ratelimit) = connect_ratelimit {
         client_config.set_connect_ratelimit(Some(ratelimit.make_handle()));
@@ -170,7 +180,7 @@ pub fn main() {
         client_config.add_server(server);
     }
 
-    client_config.set_tls_config();
+    // client_config.set_tls_config();
 
     info!("-----");
     info!("Connecting...");

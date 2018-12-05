@@ -43,10 +43,7 @@ pub struct Factory {
     max_connect_timeout: Option<u64>,
     request_timeout: u64,
     max_request_timeout: Option<u64>,
-    tls_config: Arc<rustls::ClientConfig>,
-    ca_file: Option<String>,
-    cert_file: Option<String>,
-    key_file: Option<String>,
+    tls_config: Option<Arc<rustls::ClientConfig>>,
 }
 
 impl Factory {
@@ -57,10 +54,10 @@ impl Factory {
         request_timeout: u64,
         max_connect_timeout: Option<u64>,
         max_request_timeout: Option<u64>,
-        tls_config: Arc<rustls::ClientConfig>,
-        ca_file: Option<String>,
-        cert_file: Option<String>,
-        key_file: Option<String>,
+        tls_config: Option<Arc<rustls::ClientConfig>>,
+        // ca_file: Option<String>,
+        // cert_file: Option<String>,
+        // key_file: Option<String>,
     ) -> Factory {
         Factory {
             rx,
@@ -70,16 +67,16 @@ impl Factory {
             max_connect_timeout,
             max_request_timeout,
             tls_config,
-            ca_file,
-            cert_file,
-            key_file,
+            // ca_file,
+            // cert_file,
+            // key_file,
         }
     }
 
-    pub fn connect(&self, address: SocketAddr, is_tls: bool) -> Connection {
+    pub fn connect(&self, address: SocketAddr) -> Connection {
         Connection::new(
             address,
-            is_tls,
+            // is_tls,
             self.rx,
             self.tx,
             self.connect_timeout,
@@ -87,9 +84,9 @@ impl Factory {
             self.max_connect_timeout,
             self.max_request_timeout,
             self.tls_config.clone(),
-            self.ca_file.clone(),
-            self.cert_file.clone(),
-            self.key_file.clone(),
+            // self.ca_file.clone(),
+            // self.cert_file.clone(),
+            // self.key_file.clone(),
         )
     }
 }
@@ -103,19 +100,18 @@ impl Default for Factory {
             connect_timeout: 0,
             max_connect_timeout: None,
             max_request_timeout: None,
-            tls_config: Arc::new(rustls::ClientConfig::new()),
-            ca_file: None,
-            cert_file: None,
-            key_file: None,
+            tls_config: None,
+            // ca_file: None,
+            // cert_file: None,
+            // key_file: None,
         }
     }
 }
 
 pub struct Connection {
     addr: SocketAddr,
-    is_tls: bool,
+    // is_tls: bool,
     stream: Option<TcpStream>,
-    tls_stream: Option<rustls::Stream(rustls::ClientSession, TcpStream)>,
     state: State,
     buffer: Buffer,
     timeout: Option<u64>,
@@ -126,38 +122,29 @@ pub struct Connection {
     request_failures: u64,
     request_timeout: u64,
     max_request_timeout: Option<u64>,
-    tls_config: Arc<rustls::ClientConfig>,
-    ca_file: Option<String>,
-    cert_file: Option<String>,
-    key_file: Option<String>,
-    tls_session: Option<rustls::ClientSession>
+    tls_session: Option<rustls::ClientSession>,
+    tls_config: Option<Arc<rustls::ClientConfig>>,
 }
 
 impl Connection {
     /// create connection with specified buffer sizes
     pub fn new(
         address: SocketAddr,
-        is_tls: bool,
         rx: usize,
         tx: usize,
         connect_timeout: u64,
         request_timeout: u64,
         max_connect_timeout: Option<u64>,
         max_request_timeout: Option<u64>,
-        tls_config: Arc<rustls::ClientConfig>,
-        ca_file: Option<String>,
-        cert_file: Option<String>,
-        key_file: Option<String>,
+        tls_config: Option<Arc<rustls::ClientConfig>>,
     ) -> Self {
         let mut conn = Connection {
             stream: None,
-            tls_stream: None,
             state: State::Connecting,
             buffer: Buffer::new(rx, tx),
             timeout: None,
             protocol: InternetProtocol::Any,
             addr: address,
-            is_tls: is_tls,
             connect_failures: 0,
             connect_timeout,
             max_connect_timeout,
@@ -165,10 +152,7 @@ impl Connection {
             request_timeout,
             max_request_timeout,
             tls_config,
-            ca_file,
-            cert_file,
-            key_file,
-            tls_session: None
+            tls_session: None,
         };
         conn.reconnect();
         conn
@@ -225,10 +209,13 @@ impl Connection {
         self.state = State::Connecting;
 
         if let Ok(s) = TcpStream::connect(&self.addr) {
-            if self.is_tls {
-                self.tls_session = Some(rustls::ClientSession::new(&self.tls_config,
-                    webpki::DNSNameRef::try_from_ascii_str(&self.addr.ip().to_string()).unwrap()));
-                self.tls_stream = rustls::Stream::new(&mut self.tls_session, &mut Some(s));
+            if let Some(ref tls_config) = self.tls_config {
+                self.tls_session = Some(
+                    rustls::ClientSession::new(
+                        tls_config,
+                        webpki::DNSNameRef::try_from_ascii_str(&self.addr.ip().to_string()).unwrap(),
+                    )
+                );
             } else {
                 self.stream = Some(s);
             }
@@ -258,14 +245,6 @@ impl Connection {
 
     pub fn stream(&self) -> Option<&TcpStream> {
         if let Some(ref s) = self.stream {
-            Some(s)
-        } else {
-            None
-        }
-    }
-
-    pub fn tls_stream(&self) -> Option<&rustls::Stream(rustls::ClientSession, TcpStream)> {
-        if let Some(ref s) = self.tls_stream {
             Some(s)
         } else {
             None
