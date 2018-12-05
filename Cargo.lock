@@ -467,6 +467,7 @@ dependencies = [
  "tic 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "time 0.1.38 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
+ "vecio 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "webpki 0.18.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "webpki-roots 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -628,6 +629,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "vecio"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "winapi 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ws2_32-sys 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "waterfall"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -775,6 +785,7 @@ dependencies = [
 "checksum untrusted 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)" = "55cd1f4b4e96b46aeb8d4855db4a7a9bd96eeeb5c6a1ab54593328761642ce2f"
 "checksum url 0.2.38 (registry+https://github.com/rust-lang/crates.io-index)" = "cbaa8377a162d88e7d15db0cf110c8523453edcbc5bc66d2b6fffccffa34a068"
 "checksum uuid 0.1.18 (registry+https://github.com/rust-lang/crates.io-index)" = "78c590b5bd79ed10aad8fb75f078a59d8db445af6c743e55c4a53227fc01c13f"
+"checksum vecio 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "0795a11576d29ae80525a3fda315bf7b534f8feb9d34101e5fe63fb95bb2fd24"
 "checksum waterfall 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)" = "ddfd2a19feb20d152820c6d01acfda726c305fa7ea67f685359d24f4d6040729"
 "checksum webpki 0.18.1 (registry+https://github.com/rust-lang/crates.io-index)" = "17d7967316d8411ca3b01821ee6c332bde138ba4363becdb492f12e514daa17f"
 "checksum webpki-roots 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)" = "85d1f408918fd590908a70d36b7ac388db2edc221470333e4d6e5b598e44cabf"

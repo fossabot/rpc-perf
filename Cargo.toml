@@ -55,6 +55,7 @@ simple_logger = "=0.4.0"
 tic = "=0.2.4"
 time = "=0.1.38"
 toml = "=0.4.6"
+vecio = "*"
 webpki-roots = "=0.15.0"
 webpki = "=0.18.1"
 

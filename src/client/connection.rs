@@ -15,7 +15,7 @@
 
 const RX_BUFFER: usize = 4 * 1024;
 const TX_BUFFER: usize = 4 * 1024;
-extern crate rustls;
+
 use super::net::InternetProtocol;
 
 use bytes::{Buf, MutBuf};
@@ -23,6 +23,8 @@ use client::buffer::Buffer;
 use mio::Ready;
 use mio::tcp::TcpStream;
 use mio::unix::UnixReady;
+use vecio::Rawv;
+use rustls::Session;
 use std::io::{self, Read, Write};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -243,9 +245,59 @@ impl Connection {
     /// flush the buffer
     pub fn flush(&mut self) -> Result<(), io::Error> {
         if self.state != State::Writing {
-            error!("{:?} invalid for read", self.state);
+            error!("{:?} invalid for flush", self.state);
             return Err(io::Error::new(io::ErrorKind::Other, "invalid state"));
         }
+        if self.tls_config.is_some() {
+            self.flush_tls()
+        } else {
+            self.flush_plain()
+        }
+    }
+
+    fn flush_tls(&mut self) -> Result<(), io::Error> {
+        let b = self.buffer.tx.take();
+        if let Some(buffer) = b {
+            let mut buffer = buffer.flip();
+            let buffer_bytes = buffer.remaining();
+
+            let mut stream = self.stream.take().unwrap();
+            let mut session = self.tls_session.take().unwrap();
+
+            match session.try_write_buf(&mut buffer) {
+                Ok(Some(bytes)) => {
+                    // successful write
+                    trace!("flush {} out of {} bytes", bytes, buffer_bytes);
+                    session.writev_tls(&mut WriteVAdapter::new(&mut stream)).unwrap();
+                    if !buffer.has_remaining() {
+                        // write is complete
+                        self.set_state(State::Reading);
+                    } else {
+                        // write is not complete
+                        debug!("connection buffer not flushed completely")
+                    }
+                }
+                Ok(None) => {
+                    // socket wasn't ready
+                    debug!("spurious call to flush");
+                }
+                Err(e) => {
+                    // got some write error, abandon
+                    debug!("flush error: {:?}", e);
+                    return Err(e);
+                }
+            }
+            self.buffer.tx = Some(buffer.flip());
+            self.stream = Some(stream);
+            self.tls_session = Some(session);
+            Ok(())
+        } else {
+            debug!("connection missing buffer on flush");
+            return Err(io::Error::new(io::ErrorKind::Other, "buffer missing"));
+        }
+    }
+
+    fn flush_plain(&mut self) -> Result<(), io::Error> {
         let b = self.buffer.tx.take();
         if let Some(buffer) = b {
             let mut buffer = buffer.flip();
@@ -327,6 +379,74 @@ impl Connection {
             return Err(io::Error::new(io::ErrorKind::Other, "invalid state"));
         }
 
+        if self.tls_config.is_some() {
+            self.read_tls()
+        } else {
+            self.read_plain()
+        }
+    }
+
+    fn read_tls(&mut self) -> Result<Vec<u8>, io::Error> {
+        let mut response = Vec::<u8>::new();
+
+        let mut stream = self.stream.take().unwrap();
+        let mut session = self.tls_session.take().unwrap();
+
+        let rc = session.read_tls(&mut stream);
+        if rc.is_err() {
+            trace!("tls read error: {:?}", rc);
+            return Err(io::Error::new(io::ErrorKind::Other, "tls read error"));
+        }
+
+        if rc.unwrap() == 0 {
+            trace!("connection closed on read");
+            return Err(io::Error::new(io::ErrorKind::Other, "connection closed"));
+        }
+
+        let processed = session.process_new_packets();
+        if processed.is_err() {
+            trace!("tls error: {:?}", processed.unwrap_err());
+            return Err(io::Error::new(io::ErrorKind::Other, "tls error"));
+        }
+
+        if let Some(mut buffer) = self.buffer.rx.take() {
+            match session.try_read_buf(&mut buffer) {
+                Ok(Some(0)) => {
+                    trace!("connection closed on read");
+                    return Err(io::Error::new(io::ErrorKind::Other, "connection closed"));
+                }
+                Ok(Some(n)) => {
+                    unsafe {
+                        buffer.advance(n);
+                    }
+
+                    // read bytes from connection
+                    trace!("read {} bytes", n);
+                    let mut buffer = buffer.flip();
+                    let _ = buffer.by_ref().take(n as u64).read_to_end(&mut response);
+                    self.buffer.rx = Some(buffer.flip());
+                }
+                Ok(None) => {
+                    trace!("spurious read");
+                    self.buffer.rx = Some(buffer);
+                }
+                Err(e) => {
+                    trace!("connection read error: {}", e);
+                    return Err(e);
+                }
+            }
+        } else {
+            error!("connection missing buffer on read");
+            return Err(io::Error::new(io::ErrorKind::Other, "missing buffer"));
+        }
+
+        self.stream = Some(stream);
+        self.tls_session = Some(session);
+
+        Ok(response)
+    }
+
+    fn read_plain(&mut self) -> Result<Vec<u8>, io::Error> {
         let mut response = Vec::<u8>::new();
 
         if let Some(mut buffer) = self.buffer.rx.take() {
@@ -453,3 +573,18 @@ impl<T> MapNonBlock<T> for io::Result<T> {
     }
 }
 
+pub struct WriteVAdapter<'a> {
+    rawv: &'a mut Rawv
+}
+
+impl<'a> WriteVAdapter<'a> {
+    pub fn new(rawv: &'a mut Rawv) -> WriteVAdapter<'a> {
+        WriteVAdapter { rawv }
+    }
+}
+
+impl<'a> rustls::WriteV for WriteVAdapter<'a> {
+    fn writev(&mut self, bytes: &[&[u8]]) -> io::Result<usize> {
+        self.rawv.writev(bytes)
+    }
+}

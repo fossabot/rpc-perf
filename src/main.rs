@@ -36,7 +36,8 @@ extern crate slab;
 extern crate tic;
 extern crate time;
 extern crate toml;
-
+extern crate rustls;
+extern crate vecio;
 extern crate webpki;
 
 #[macro_use]
