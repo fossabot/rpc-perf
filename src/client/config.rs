@@ -29,9 +29,6 @@ const KILOBYTE: usize = 1024;
 #[derive(Clone)]
 pub struct Config {
     servers: Vec<String>,
-    key_file: Option<String>,
-    cert_file: Option<String>,
-    ca_file: Option<String>,
     pool_size: usize,
     stats: Option<Sender<Stat>>,
     clocksource: Option<Clocksource>,
@@ -45,16 +42,13 @@ pub struct Config {
     max_connect_timeout: Option<u64>,
     rx_buffer_size: usize,
     tx_buffer_size: usize,
-    tls_config: Arc<rustls::ClientConfig>,
+    tls_config: Option<Arc<rustls::ClientConfig>>,
 }
 
 impl Default for Config {
     fn default() -> Config {
         Config {
             servers: Vec::new(),
-            key_file: None,
-            cert_file: None,
-            ca_file: None,
             pool_size: 1,
             stats: None,
             clocksource: None,
@@ -68,7 +62,7 @@ impl Default for Config {
             internet_protocol: InternetProtocol::Any,
             rx_buffer_size: 4 * KILOBYTE,
             tx_buffer_size: 4 * KILOBYTE,
-            tls_config: Arc::new(rustls::ClientConfig::new()),
+            tls_config: None,
         }
     }
 }
@@ -83,36 +77,6 @@ impl Config {
     /// get vector of endpoints
     pub fn servers(&self) -> Vec<String> {
         self.servers.clone()
-    }
-
-    /// set the key file
-    pub fn set_key_file(&mut self, key_file: Option<String>) -> &mut Self {
-        self.key_file = key_file;
-        self
-    }
-
-    /// set the cert file
-    pub fn set_cert_file(&mut self, cert_file: Option<String>) -> &mut Self {
-        self.cert_file = cert_file;
-        self
-    }
-
-    /// set the ca file
-    pub fn set_ca_file(&mut self, ca_file: Option<String>) -> &mut Self {
-        self.ca_file = ca_file;
-        self
-    }
-
-    pub fn key_file(&self) -> Option<String> {
-        self.key_file.clone()
-    }
-
-    pub fn cert_file(&self) -> Option<String> {
-        self.cert_file.clone()
-    }
-
-    pub fn ca_file(&self) -> Option<String> {
-        self.ca_file.clone()
     }
 
     /// get the number of connections maintained to each endpoint
@@ -277,49 +241,50 @@ impl Config {
         self
     }
 
-    fn load_certs(&mut self) -> Vec<rustls::Certificate> {
-        let certfile = fs::File::open(self.cert_file.as_ref().unwrap()).expect("cannot open certificate file");
+    pub fn tls_config(&self) -> Option<Arc<rustls::ClientConfig>> {
+        self.tls_config.clone()
+    }
+
+    // set the CA to validate remote cert
+    pub fn set_tls_ca(&mut self, ca_file: String) -> &mut Self {
+        if self.tls_config.is_none() {
+            self.tls_config = Some(Arc::new(rustls::ClientConfig::new()));
+        }
+
+        let mut config = self.tls_config.expect("No tls config");
+
+        let certfile = fs::File::open(&ca_file).expect("Cannot open CA file");
         let mut reader = BufReader::new(certfile);
-        rustls::internal::pemfile::certs(&mut reader).unwrap()
-    }
-
-    fn load_private_key(&mut self) -> rustls::PrivateKey {
-        let keyfile = fs::File::open(self.key_file.as_ref().unwrap()).expect("cannot open private key file");
-        let mut reader = BufReader::new(keyfile);
-        let keys = rustls::internal::pemfile::
-        rsa_private_keys(&mut reader).unwrap();
-        assert!(keys.len() == 1);
-        keys[0].clone()
-    }
-
-    fn load_key_and_cert(&mut self, config: &mut rustls::ClientConfig) {
-        let certs = self.load_certs();
-        let privkey = self.load_private_key();
-
-        config.set_single_client_cert(certs, privkey);
-    }
-
-    pub fn set_tls_config(&mut self) -> &mut Self {
-        let mut config = rustls::ClientConfig::new();
-        if self.ca_file.is_some() {
-            let cafile = self.ca_file.as_ref().unwrap();
-
-            let certfile = fs::File::open(&cafile).expect("Cannot open CA file");
-            let mut reader = BufReader::new(certfile);
-            config.root_store.
-                add_pem_file(&mut reader).
-                unwrap();
-        }
-
-        if self.key_file.is_some() || self.cert_file.is_some() {
-            self.load_key_and_cert(&mut config);
-        }
-
-        self.tls_config = Arc::new(config);
+        config.root_store.
+            add_pem_file(&mut reader).
+            unwrap();
+        self.tls_config = Some(config);
         self
     }
 
-    pub fn tls_config(&self) -> Arc<rustls::ClientConfig> {
-        self.tls_config.clone()
+    // set the client single cert
+    pub fn set_tls_single_cert(&mut self, cert_file: String, key_file: String) -> &mut Self {
+        if self.tls_config.is_none() {
+            self.tls_config = Some(Arc::new(rustls::ClientConfig::new()));
+        }
+
+        let mut config = self.tls_config.expect("No tls config");
+
+        // load the cert
+        let cert_file = fs::File::open(&cert_file).expect("cannot open certificate file");
+        let mut cert_buf = BufReader::new(cert_file);
+        let cert_chain = rustls::internal::pemfile::certs(&mut cert_buf).unwrap();
+
+        // load the key
+        let key_file = fs::File::open(&key_file).expect("cannot open private key file");
+        let mut key_buf = BufReader::new(key_file);
+        let keys = rustls::internal::pemfile::rsa_private_keys(&mut key_buf).unwrap();
+        assert!(keys.len() == 1);
+        let key_der = keys[0].clone();
+
+        config.set_single_client_cert(cert_chain, key_der);
+
+        self.tls_config = Some(config);
+        self
     }
 }
