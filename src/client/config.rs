@@ -91,7 +91,7 @@ impl Config {
 
         let certfile = fs::File::open(&ca_file).expect("Cannot open CA file");
         let mut reader = BufReader::new(certfile);
-        tls_config.root_store.add_pem_file(&mut reader).unwrap();
+        tls_config.root_store.add_pem_file(&mut reader).expect("failed to read CA");
         self.tls_config = Some(tls_config);
         self
     }
@@ -105,12 +105,12 @@ impl Config {
         // load the cert
         let cert_file = fs::File::open(cert_file).expect("cannot open certificate file");
         let mut cert_buf = BufReader::new(cert_file);
-        let cert_chain = rustls::internal::pemfile::certs(&mut cert_buf).unwrap();
+        let cert_chain = rustls::internal::pemfile::certs(&mut cert_buf).expect("failed to read cert");
 
         // load the key
         let key_file = fs::File::open(key_file).expect("cannot open private key file");
         let mut key_buf = BufReader::new(key_file);
-        let keys = rustls::internal::pemfile::pkcs8_private_keys(&mut key_buf).unwrap();
+        let keys = rustls::internal::pemfile::pkcs8_private_keys(&mut key_buf).expect("failed to read key");
         assert!(keys.len() == 1);
         let key_der = keys[0].clone();
 

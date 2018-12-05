@@ -201,7 +201,7 @@ impl Connection {
                 self.tls_session = Some(
                     rustls::ClientSession::new(
                         tls_config,
-                        webpki::DNSNameRef::try_from_ascii_str(&self.addr.ip().to_string()).unwrap(),
+                        webpki::DNSNameRef::try_from_ascii_str(&self.addr.ip().to_string()).expect("failed to dns resolve"),
                     )
                 );
             }
@@ -261,14 +261,14 @@ impl Connection {
             let mut buffer = buffer.flip();
             let buffer_bytes = buffer.remaining();
 
-            let mut stream = self.stream.take().unwrap();
-            let mut session = self.tls_session.take().unwrap();
+            let mut stream = self.stream.take().expect("no stream");
+            let mut session = self.tls_session.take().expect("no session");
 
             match session.try_write_buf(&mut buffer) {
                 Ok(Some(bytes)) => {
                     // successful write
                     trace!("flush {} out of {} bytes", bytes, buffer_bytes);
-                    session.writev_tls(&mut WriteVAdapter::new(&mut stream)).unwrap();
+                    session.writev_tls(&mut WriteVAdapter::new(&mut stream)).expect("failed writev_tls");
                     if !buffer.has_remaining() {
                         // write is complete
                         self.set_state(State::Reading);
@@ -303,7 +303,7 @@ impl Connection {
             let mut buffer = buffer.flip();
             let buffer_bytes = buffer.remaining();
 
-            let mut s = self.stream.take().unwrap();
+            let mut s = self.stream.take().expect("no stream");
 
             match s.try_write_buf(&mut buffer) {
                 Ok(Some(bytes)) => {
@@ -389,8 +389,8 @@ impl Connection {
     fn read_tls(&mut self) -> Result<Vec<u8>, io::Error> {
         let mut response = Vec::<u8>::new();
 
-        let mut stream = self.stream.take().unwrap();
-        let mut session = self.tls_session.take().unwrap();
+        let mut stream = self.stream.take().expect("no stream");
+        let mut session = self.tls_session.take().expect("no session");
 
         let rc = session.read_tls(&mut stream);
         if rc.is_err() {
@@ -450,7 +450,7 @@ impl Connection {
         let mut response = Vec::<u8>::new();
 
         if let Some(mut buffer) = self.buffer.rx.take() {
-            let mut s = self.stream.take().unwrap();
+            let mut s = self.stream.take().expect("no stream");
             match s.try_read_buf(&mut buffer) {
                 Ok(Some(0)) => {
                     trace!("connection closed on read");

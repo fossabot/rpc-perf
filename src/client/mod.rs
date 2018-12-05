@@ -92,7 +92,7 @@ impl Client {
 
         let queue = Queue::with_capacity(MAX_PENDING);
 
-        let clocksource = config.clocksource().unwrap();
+        let clocksource = config.clocksource().expect("no clocksource");
 
         let factory = Factory::new(
             config.rx_buffer_size(),
@@ -110,13 +110,13 @@ impl Client {
             connections: Slab::with_capacity(MAX_CONNECTIONS),
             events: Some(Events::with_capacity(MAX_EVENTS)),
             factory: factory,
-            poll: Poll::new().unwrap(),
+            poll: Poll::new().expect("Couldn't create new mio::Poll"),
             queue: queue,
             ready: VecDeque::new(),
-            stats: config.stats().unwrap(),
+            stats: config.stats().expect("Couldn't get stats"),
             times: vec![clocksource.counter(); MAX_CONNECTIONS],
             rtimes: vec![clocksource.counter(); MAX_CONNECTIONS],
-            protocol: Arc::clone(&config.protocol().unwrap()).new(),
+            protocol: Arc::clone(&config.protocol().expect("Couldn't get protocol")).new(),
             connect_timeout: config.base_connect_timeout(),
             connect_ratelimit: config.connect_ratelimit(),
         };
@@ -131,7 +131,7 @@ impl Client {
                         Ok(token) => {
                             client.send_stat(token, Stat::SocketCreate);
                             if client.has_stream(token) {
-                                client.register(client.connections[token].stream().unwrap(), token);
+                                client.register(client.connections[token].stream().expect("Couldn't register connection"), token);
                                 client.set_timeout(token);
                             } else {
                                 error!("failure creating connection");
@@ -297,7 +297,7 @@ impl Client {
             self.connections[token].connect();
             self.send_stat(token, Stat::SocketCreate);
             if self.connections[token].stream().is_some() {
-                self.register(self.connections[token].stream().unwrap(), token);
+                self.register(self.connections[token].stream().expect("no stream for connection"), token);
                 self.set_timeout(token);
             } else {
                 debug!("failure reconnecting");
@@ -516,7 +516,7 @@ impl Client {
 
         self.poll
             .poll(&mut events, Some(Duration::from_millis(TICK_MS)))
-            .unwrap();
+            .expect("Failed to poll");
 
         let mut rtokens = Vec::new();
 
@@ -536,7 +536,7 @@ impl Client {
         }
 
         for _ in 0..self.ready.len() {
-            let token = self.ready.pop_front().unwrap();
+            let token = self.ready.pop_front().expect("Couldn't get ready token");
             self.try_send(token);
         }
 
