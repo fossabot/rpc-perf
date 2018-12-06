@@ -251,41 +251,41 @@ impl Connection {
         self.state
     }
 
-    pub fn negotiate(&mut self) -> Result<(), io::Error> {
-        let mut stream = self.stream.take().expect("no stream");
-        let mut session = self.tls_session.take().expect("no session");
+    // pub fn negotiate(&mut self) -> Result<(), io::Error> {
+    //     let mut stream = self.stream.take().expect("no stream");
+    //     let mut session = self.tls_session.take().expect("no session");
 
-        if session.wants_write() {
-            session.write_tls(&mut stream);
-        }
+    //     if session.wants_write() {
+    //         session.write_tls(&mut stream);
+    //     }
 
-        if session.wants_read() {
-            let rc = session.read_tls(&mut stream);
-            if rc.is_err() {
-                trace!("tls read error: {:?}", rc);
-                return Err(io::Error::new(io::ErrorKind::Other, "tls read error"));
-            }
+    //     if session.wants_read() {
+    //         let rc = session.read_tls(&mut stream);
+    //         if rc.is_err() {
+    //             trace!("tls read error: {:?}", rc);
+    //             return Err(io::Error::new(io::ErrorKind::Other, "tls read error"));
+    //         }
 
-            if rc.unwrap() == 0 {
-                trace!("connection closed on read");
-                return Err(io::Error::new(io::ErrorKind::Other, "connection closed"));
-            }
+    //         if rc.unwrap() == 0 {
+    //             trace!("connection closed on read");
+    //             return Err(io::Error::new(io::ErrorKind::Other, "connection closed"));
+    //         }
 
-            let processed = session.process_new_packets();
-            if processed.is_err() {
-                trace!("tls error: {:?}", processed.unwrap_err());
-                return Err(io::Error::new(io::ErrorKind::Other, "tls error"));
-            }
-        }
+    //         let processed = session.process_new_packets();
+    //         if processed.is_err() {
+    //             trace!("tls error: {:?}", processed.unwrap_err());
+    //             return Err(io::Error::new(io::ErrorKind::Other, "tls error"));
+    //         }
+    //     }
 
-        self.stream = Some(stream);
-        self.tls_session = Some(session);
+    //     self.stream = Some(stream);
+    //     self.tls_session = Some(session);
 
-        Ok(())
+    //     Ok(())
         
 
 
-    }
+    // }
 
     /// flush the buffer
     pub fn flush(&mut self) -> Result<(), io::Error> {
