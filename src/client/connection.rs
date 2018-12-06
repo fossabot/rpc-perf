@@ -175,6 +175,14 @@ impl Connection {
         }
     }
 
+    pub fn is_handshaking(&self) -> bool {
+        if let Some(ref session) = self.tls_session {
+            session.is_handshaking()
+        } else {
+            false
+        }
+    }
+
     pub fn clear_failures(&mut self) {
         self.connect_failures = 0;
         self.request_failures = 0;
@@ -298,7 +306,7 @@ impl Connection {
     }
 
     fn flush_tls(&mut self) -> Result<(), io::Error> {
-        if self.state == State::Connecting {
+        if self.state == State::Negotiating {
             let mut stream = self.stream.take().expect("no stream");
             let mut session = self.tls_session.take().expect("no session");
 
@@ -343,6 +351,7 @@ impl Connection {
                 }
             }
             self.buffer.tx = Some(buffer.flip());
+            session.write_tls(&mut stream);
             self.stream = Some(stream);
             self.tls_session = Some(session);
             Ok(())
@@ -442,7 +451,7 @@ impl Connection {
 
     pub fn read(&mut self) -> Result<Vec<u8>, io::Error> {
         if self.state() != State::Reading {
-            if self.state == State::Connecting {
+            if self.state == State::Negotiating {
                 let mut stream = self.stream.take().expect("no stream");
                 let mut session = self.tls_session.take().expect("no session");
 
@@ -566,23 +575,10 @@ impl Connection {
 
     pub fn event_set(&self) -> Ready {
         match self.state {
-            State::Established | State::Writing => {
-                Ready::writable() | UnixReady::hup()
-            }
+            State::Established | State::Writing => Ready::writable() | UnixReady::hup(),
             State::Reading => Ready::readable() | UnixReady::hup(),
-            State::Connecting => {
-                if let Some(ref session) = self.tls_session {
-                    if session.wants_write() {
-                        trace!("tls wants write");
-                        Ready::writable() | UnixReady::hup()
-                    } else {
-                        trace!("tls wants read");
-                        Ready::readable() | UnixReady::hup()
-                    }
-                } else {
-                    Ready::writable() | UnixReady::hup()
-                }
-            }
+            State::Connecting => Ready::writable() | UnixReady::hup(),
+            State::Negotiating => Ready::readable() | Ready::writable() | UnixReady::hup(),
             _ => Ready::empty(),
         }
     }

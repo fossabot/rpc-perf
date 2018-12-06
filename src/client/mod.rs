@@ -515,12 +515,21 @@ impl Client {
                         self.read(token);
                     }
                 } else {
-                    trace!("connection established {:?}", token);
-                    self.send_stat(token, Stat::ConnectOk);
-                    self.clear_timer(token);
+                    if self.config.tls_config().is_none() {
+                        trace!("connection established {:?}", token);
+                        self.send_stat(token, Stat::ConnectOk);
+                        self.clear_timer(token);
 
-                    self.set_state(token, State::Writing);
-                    self.ready.push_back(token);
+                        self.set_state(token, State::Writing);
+                        self.ready.push_back(token);
+                    } else {
+                        trace!("plain connection established -> negitiating {:?}", token);
+                        self.set_state(token, State::Negotiating);
+                        if let Some(s) = self.connections[token].stream() {
+                            self.register(s, token);
+                        }
+                    }
+                    
                 }
                 
             }
@@ -549,7 +558,21 @@ impl Client {
                 }
                 State::Negotiating => {
                     trace!("negotiating {:?}", token);
-                    self.negotiate(token);
+                    if self.connections[token].is_handshaking() {
+                        if event.readiness().is_readable() {
+                            self.connections[token].read();
+                        } else {
+                            self.connections[token].flush();
+                        }
+                    } else {
+                        trace!("tls connection established {:?}", token);
+                        self.send_stat(token, Stat::ConnectOk);
+                        self.clear_timer(token);
+
+                        self.set_state(token, State::Writing);
+                        self.ready.push_back(token);
+                    }
+                    // self.negotiate(token);
                 }
                 _ => {}
             }
