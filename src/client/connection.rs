@@ -32,6 +32,7 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum State {
     Closed,
+    Negotiating,
     Connecting,
     Established,
     Reading,
@@ -242,9 +243,50 @@ impl Connection {
         self.state
     }
 
+    pub fn negotiate(&mut self) -> Result<(), io::Error> {
+        let mut stream = self.stream.take().expect("no stream");
+        let mut session = self.tls_session.take().expect("no session");
+
+        if session.wants_write() {
+            session.write_tls(&mut stream);
+        }
+
+        if session.wants_read() {
+            let rc = session.read_tls(&mut stream);
+            if rc.is_err() {
+                trace!("tls read error: {:?}", rc);
+                return Err(io::Error::new(io::ErrorKind::Other, "tls read error"));
+            }
+
+            if rc.unwrap() == 0 {
+                trace!("connection closed on read");
+                return Err(io::Error::new(io::ErrorKind::Other, "connection closed"));
+            }
+
+            let processed = session.process_new_packets();
+            if processed.is_err() {
+                trace!("tls error: {:?}", processed.unwrap_err());
+                return Err(io::Error::new(io::ErrorKind::Other, "tls error"));
+            }
+        }
+
+        self.stream = Some(stream);
+        self.tls_session = Some(session);
+
+        Ok(())
+        
+
+
+    }
+
     /// flush the buffer
     pub fn flush(&mut self) -> Result<(), io::Error> {
         if self.state != State::Writing {
+            if self.state == State::Connecting {
+                if self.tls_config.is_some() {
+                    return self.flush_tls();
+                }
+            }
             error!("{:?} invalid for flush", self.state);
             return Err(io::Error::new(io::ErrorKind::Other, "invalid state"));
         }
@@ -256,6 +298,18 @@ impl Connection {
     }
 
     fn flush_tls(&mut self) -> Result<(), io::Error> {
+        if self.state == State::Connecting {
+            let mut stream = self.stream.take().expect("no stream");
+            let mut session = self.tls_session.take().expect("no session");
+
+            session.write_tls(&mut stream);
+
+            self.stream = Some(stream);
+            self.tls_session = Some(session);
+
+            return Ok(());
+        }
+
         let b = self.buffer.tx.take();
         if let Some(buffer) = b {
             let mut buffer = buffer.flip();
@@ -268,7 +322,8 @@ impl Connection {
                 Ok(Some(bytes)) => {
                     // successful write
                     trace!("flush {} out of {} bytes", bytes, buffer_bytes);
-                    session.writev_tls(&mut WriteVAdapter::new(&mut stream)).expect("failed writev_tls");
+                    // session.write
+                    // session.writev_tls(&mut WriteVAdapter::new(&mut stream)).expect("failed writev_tls");
                     if !buffer.has_remaining() {
                         // write is complete
                         self.set_state(State::Reading);
@@ -343,6 +398,18 @@ impl Connection {
             error!("{:?} invalid for read", self.state);
             return Err(io::Error::new(io::ErrorKind::Other, "invalid state"));
         }
+
+        if self.tls_config.is_some() {
+            let mut stream = self.stream.take().unwrap();
+            let mut session = self.tls_session.take().unwrap();
+            if session.wants_write() {
+                session.write_tls(&mut stream).expect("Failed to write tls");
+            }
+            self.tls_session = Some(session);
+            self.stream = Some(stream);
+            return Ok(())
+        }
+
         trace!("write {} bytes", bytes.len());
         let b = self.buffer.tx.take();
         if let Some(mut buffer) = b {
@@ -375,6 +442,18 @@ impl Connection {
 
     pub fn read(&mut self) -> Result<Vec<u8>, io::Error> {
         if self.state() != State::Reading {
+            if self.state == State::Connecting {
+                let mut stream = self.stream.take().expect("no stream");
+                let mut session = self.tls_session.take().expect("no session");
+
+                session.read_tls(&mut stream);
+
+                self.stream = Some(stream);
+                self.tls_session = Some(session);
+
+                return Ok(Vec::new());
+            }
+
             error!("{:?} invalid for read", self.state);
             return Err(io::Error::new(io::ErrorKind::Other, "invalid state"));
         }
@@ -487,10 +566,23 @@ impl Connection {
 
     pub fn event_set(&self) -> Ready {
         match self.state {
-            State::Connecting | State::Established | State::Writing => {
+            State::Established | State::Writing => {
                 Ready::writable() | UnixReady::hup()
             }
             State::Reading => Ready::readable() | UnixReady::hup(),
+            State::Connecting => {
+                if let Some(ref session) = self.tls_session {
+                    if session.wants_write() {
+                        trace!("tls wants write");
+                        Ready::writable() | UnixReady::hup()
+                    } else {
+                        trace!("tls wants read");
+                        Ready::readable() | UnixReady::hup()
+                    }
+                } else {
+                    Ready::writable() | UnixReady::hup()
+                }
+            }
             _ => Ready::empty(),
         }
     }

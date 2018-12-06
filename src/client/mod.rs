@@ -412,7 +412,7 @@ impl Client {
     fn timeout(&mut self, token: Token) {
         debug!("timeout {:?}", token);
         match self.state(token) {
-            State::Connecting => {
+            State::Connecting | State::Negotiating => {
                 self.send_stat(token, Stat::ConnectTimeout);
                 self.connections[token].connect_failed();
                 self.reconnect(token);
@@ -439,6 +439,23 @@ impl Client {
         trace!("flush {:?}", token);
         self.times[token.0] = self.clocksource.counter();
         if self.connections[token].flush().is_ok() {
+            if let Some(s) = self.connections[token].stream() {
+                self.register(s, token);
+            }
+        } else {
+            self.send_stat(token, Stat::ConnectError);
+            self.connections[token].connect_failed();
+            self.reconnect(token);
+        }
+    }
+
+    /// write remaining buffer to underlying stream for token
+    /// - reconnect on failure
+    /// - transition to Reading when write buffer depleated
+    fn negotiate(&mut self, token: Token) {
+        trace!("negotiate {:?}", token);
+        self.times[token.0] = self.clocksource.counter();
+        if self.connections[token].negotiate().is_ok() {
             if let Some(s) = self.connections[token].stream() {
                 self.register(s, token);
             }
@@ -489,11 +506,23 @@ impl Client {
                 }
                 return;
             } else {
-                trace!("connection established {:?}", token);
-                self.send_stat(token, Stat::ConnectOk);
-                self.clear_timer(token);
-                self.set_state(token, State::Writing);
-                self.ready.push_back(token);
+                if self.config.tls_config().is_some() {
+                    if event.readiness().is_writable() {
+                        trace!("do a write");
+                        self.flush(token);
+                    } else {
+                        trace!("do a read");
+                        self.read(token);
+                    }
+                } else {
+                    trace!("connection established {:?}", token);
+                    self.send_stat(token, Stat::ConnectOk);
+                    self.clear_timer(token);
+
+                    self.set_state(token, State::Writing);
+                    self.ready.push_back(token);
+                }
+                
             }
         } else {
             if UnixReady::from(event.readiness()).is_hup() {
@@ -517,6 +546,10 @@ impl Client {
                     trace!("writing {:?}", token);
                     self.send_stat(token, Stat::SocketFlush);
                     self.flush(token);
+                }
+                State::Negotiating => {
+                    trace!("negotiating {:?}", token);
+                    self.negotiate(token);
                 }
                 _ => {}
             }
