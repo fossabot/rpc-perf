@@ -40,19 +40,9 @@ impl Memcache {
         exptime: Option<u32>,
         flags: Option<u32>,
     ) {
-        let exptime = format!("{}", exptime.unwrap_or(0));
-        let flags = format!("{}", flags.unwrap_or(0));
-        let length = format!("{}", value.len());
-
         buf.extend_from_slice(b"set ");
         buf.extend_from_slice(key);
-        buf.extend_from_slice(b" ");
-        buf.extend_from_slice(flags.as_bytes());
-        buf.extend_from_slice(b" ");
-        buf.extend_from_slice(exptime.as_bytes());
-        buf.extend_from_slice(b" ");
-        buf.extend_from_slice(length.as_bytes());
-        buf.extend_from_slice(b"\r\n");
+        buf.extend_from_slice(b" {} {} {}\r\n", exptime.unwrap_or(0), flags.unwrap_or(0), value.len());
         buf.extend_from_slice(value);
         buf.extend_from_slice(b"\r\n");
     }

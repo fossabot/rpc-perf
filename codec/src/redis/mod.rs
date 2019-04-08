@@ -41,9 +41,7 @@ impl Redis {
                 buf.extend_from_slice(b"\r\n");
             }
             Mode::Resp => {
-                buf.extend_from_slice(b"*2\r\n$3\r\nget\r\n$");
-                buf.extend_from_slice(format!("{}", key.len()).as_bytes());
-                buf.extend_from_slice(b"\r\n");
+                buf.extend_from_slice(format!("*2\r\n$3\r\nget\r\n${}\r\n", key.len()).as_bytes());
                 buf.extend_from_slice(key);
                 buf.extend_from_slice(b"\r\n");
             }
@@ -58,8 +56,7 @@ impl Redis {
                 buf.extend_from_slice(b" ");
                 buf.extend_from_slice(value);
                 if let Some(ttl_value) = ttl {
-                    buf.extend_from_slice(b" EX ");
-                    buf.extend_from_slice(format!("{}", ttl_value).as_bytes());
+                    buf.extend_from_slice(format!(" EX {}", ttl_value).as_bytes());
                 }
                 buf.extend_from_slice(b"\r\n");
             }
@@ -69,21 +66,14 @@ impl Redis {
                 } else {
                     buf.extend_from_slice(b"*3\r\n");
                 }
-                buf.extend_from_slice(b"$3\r\nset\r\n$");
-                buf.extend_from_slice(format!("{}", key.len()).as_bytes());
-                buf.extend_from_slice(b"\r\n");
+                buf.extend_from_slice(format!("$3\r\nset\r\n${}\r\n", key.len()).as_bytes());
                 buf.extend_from_slice(key);
-                buf.extend_from_slice(b"\r\n$");
-                buf.extend_from_slice(format!("{}", value.len()).as_bytes());
-                buf.extend_from_slice(b"\r\n");
+                buf.extend_from_slice(format!("\r\n${}\r\n", value.len()).as_bytes());
                 buf.extend_from_slice(value);
                 buf.extend_from_slice(b"\r\n");
-                if let Some(ttl_value) = ttl {
-                    let formated_ttl = format!("{}", ttl_value);
-                    buf.extend_from_slice(b"$2\r\nEX\r\n");
-                    buf.extend_from_slice(format!("${}\r\n", formated_ttl.len()).as_bytes());
-                    buf.extend_from_slice(formated_ttl.as_bytes());
-                    buf.extend_from_slice(b"\r\n");
+                if let Some(ttl) = ttl {
+                    let ttl = format!("{}", ttl);
+                    buf.extend_from_slice(format!("$2\r\nEX\r\n${}\r\n{}\r\n", ttl.len(), ttl).as_bytes());
                 }
             }
         }
