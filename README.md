@@ -1,4 +1,6 @@
 # rpc-perf - RPC Performance Testing
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fbrayniac%2Frpc-perf.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fbrayniac%2Frpc-perf?ref=badge_shield)
+
 
 rpc-perf was created to help measure the performance of caching systems. We've found this tool to be
 useful for validating performance of cache backends, effects of kernel version and system tuning, as
@@ -104,3 +106,7 @@ rpc-perf --config some_config.toml --endpoint 127.0.0.1:11211 --interval 60 --wi
 [rustlang]: https://rust-lang.org/
 [rustup]: https://rustup.rs
 [mio]: https://github.com/carllerche/mio
+
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fbrayniac%2Frpc-perf.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fbrayniac%2Frpc-perf?ref=badge_large)
